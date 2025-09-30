@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+import base64
+import os
 from ..database.db import get_db
 from ..database.models import User, Room, KeyDistribution, user_room_association
 from .auth import get_current_user
-# from ..quantum.encryption import generate_kyber_keypair, encapsulate_key  # Commented out for testing
+from ..quantum.encryption import generate_kyber_keypair, encapsulate_key
 import base64
 
 router = APIRouter()
@@ -19,10 +21,9 @@ class RoomResponse(BaseModel):
 @router.post("/", response_model=RoomResponse)
 async def create_room(request: CreateRoomRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     # Generate symmetric key for the room
-    import os
     symmetric_key = os.urandom(32)  # For AES-256
 
-    # Store symmetric key as base64 (insecure, should be encrypted per user later)
+    # Store symmetric key as base64 (insecure for now, should be hash or something)
     symmetric_key_b64 = base64.b64encode(symmetric_key).decode()
 
     # Create room
@@ -34,6 +35,18 @@ async def create_room(request: CreateRoomRequest, current_user: User = Depends(g
     # Add creator to room
     stmt = user_room_association.insert().values(user_id=current_user.id, room_id=new_room.id)
     db.execute(stmt)
+
+    # Distribute key to creator (encapsulate with creator's public key)
+    public_key = base64.b64decode(current_user.kyber_public_key)
+    shared_secret, ciphertext = encapsulate_key(public_key)
+    encapsulated_key_b64 = base64.b64encode(ciphertext).decode()
+
+    key_dist = KeyDistribution(
+        room_id=new_room.id,
+        user_id=current_user.id,
+        encapsulated_key=encapsulated_key_b64
+    )
+    db.add(key_dist)
     db.commit()
 
     return RoomResponse(id=new_room.id, name=new_room.name)
@@ -64,10 +77,20 @@ async def join_room(room_id: int, current_user: User = Depends(get_current_user)
     # Add to room
     stmt = user_room_association.insert().values(user_id=current_user.id, room_id=room_id)
     db.execute(stmt)
-    db.commit()
 
-    # Now, distribute the room key to this user if exists
-    # TODO: Implement key distribution when room key exists
+    # Distribute the room key to this user by encapsulating with their public key
+    if room.symmetric_key_encrypted:
+        public_key = base64.b64decode(current_user.kyber_public_key)
+        shared_secret, ciphertext = encapsulate_key(public_key)
+        encapsulated_key_b64 = base64.b64encode(ciphertext).decode()
+
+        key_dist = KeyDistribution(
+            room_id=room.id,
+            user_id=current_user.id,
+            encapsulated_key=encapsulated_key_b64
+        )
+        db.add(key_dist)
+        db.commit()
 
     return {"message": "Joined room"}
 

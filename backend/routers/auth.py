@@ -2,10 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+import base64
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.backends import default_backend
+import os
 from ..database.db import get_db
 from ..database.models import User
 from ..auth import verify_password, get_password_hash, create_access_token
-# from ..quantum.encryption import generate_kyber_keypair  # Commented out for testing
+from ..quantum.encryption import generate_kyber_keypair
 
 router = APIRouter()
 security = HTTPBearer()
@@ -29,17 +35,27 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already registered")
 
-    # Generate Kyber keys (commented out for testing)
-    # public_key, private_key = generate_kyber_keypair()
-    # In a real app, encrypt private_key with user's password for storage
-    # For now, store raw (but this is insecure; should derive encryption key from password)
+    # Generate Kyber keys
+    public_key, private_key = generate_kyber_keypair()
 
-    # For simplicity, storing base64 encoded (but private keys should be encrypted)
-    # import base64
-    kyber_public_key_b64 = "dummy_public_key"  # base64.b64encode(public_key).decode()
-    kyber_private_key_b64 = "dummy_private_key"  # base64.b64encode(private_key).decode()  # Should be encrypted
+    # Encrypt private key with user's password using PBKDF2 + Fernet
+    salt = os.urandom(16)
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(request.password.encode()))
+    f = Fernet(key)
+    private_key_encrypted = f.encrypt(private_key)
 
-    # Hash password
+    # Base64 encode for storage
+    kyber_public_key_b64 = base64.b64encode(public_key).decode()
+    kyber_private_key_b64 = base64.b64encode(salt + private_key_encrypted).decode()
+
+    # Hash password for authentication
     password_hash = get_password_hash(request.password)
 
     # Create user
