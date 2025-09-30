@@ -50,16 +50,26 @@ const Chat: React.FC = () => {
       try {
         const messageWrapper = JSON.parse(event.data);
         if (messageWrapper.type === 'new_message') {
-          const messageData: Message = messageWrapper.data;
-          setMessages(prev => [...prev, messageData]);
-          // Decrypt the new message
-          if (roomKey) {
-            try {
-              const encryptedData = JSON.parse(messageData.encrypted_data);
-              const decrypted = decryptMessage(encryptedData, roomKey);
-              setDecryptedMessages(prev => ({ ...prev, [messageData.id]: decrypted }));
-            } catch (err) {
-              console.error('Failed to decrypt incoming message:', err);
+          if (Array.isArray(messageWrapper.data)) {
+            // Full messages list update
+            setMessages(messageWrapper.data);
+            decryptAllMessages(messageWrapper.data);
+          } else {
+            // Single message
+            const messageData: Message = messageWrapper.data;
+            setMessages(prev => {
+              if (prev.some(m => m.id === messageData.id)) return prev;
+              return [...prev, messageData];
+            });
+            // Decrypt the new message
+            if (roomKey) {
+              try {
+                const encryptedData = JSON.parse(messageData.encrypted_data);
+                const decrypted = decryptMessage(encryptedData, roomKey);
+                setDecryptedMessages(prev => ({ ...prev, [messageData.id]: decrypted }));
+              } catch (err) {
+                console.error('Failed to decrypt incoming message:', err);
+              }
             }
           }
         }
