@@ -64,6 +64,8 @@ const Register: React.FC = () => {
 
       // Store user data (backend generates quantum keys)
       localStorage.setItem('user', JSON.stringify(response.user));
+      // Store password for key decryption (will be cleared after key loading)
+      localStorage.setItem('userPassword', formData.password);
 
       setSuccess(true);
       setTimeout(() => navigate('/rooms'), 2000);

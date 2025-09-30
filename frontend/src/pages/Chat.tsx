@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Typography, List, ListItem, ListItemText, TextField, Button, Paper, Box, Alert, CircularProgress } from '@mui/material';
+import { Container, Typography, List, ListItem, ListItemText, TextField, Button, Paper, Box, Alert, CircularProgress, Chip } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { encryptMessage, decryptMessage } from '../utils/cryptoUtils';
+import keyService from '../services/keyService';
+import { QuantumCrypto } from '../utils/cryptoUtils';
 
 interface Message {
   id: number;
@@ -17,14 +18,16 @@ const Chat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [decryptedMessages, setDecryptedMessages] = useState<{[key: number]: string}>({});
   const [newMessage, setNewMessage] = useState('');
-  const [roomKey, setRoomKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [encryptionPreview, setEncryptionPreview] = useState<string>('');
+  const [hasRoomKey, setHasRoomKey] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const token = localStorage.getItem('token');
+  const numericRoomId = roomId ? parseInt(roomId) : 0;
 
   useEffect(() => {
     if (!token) {
@@ -32,10 +35,42 @@ const Chat: React.FC = () => {
       return;
     }
 
-    fetchMessages();
-    fetchRoomKey();
-    setupWebSocket();
+    initializeChat();
   }, [roomId, token, navigate]);
+
+  const initializeChat = async () => {
+    try {
+      setLoading(true);
+      // Load user keys if not already loaded
+      const password = localStorage.getItem('userPassword');
+      if (password && !keyService.hasKeys()) {
+        await keyService.loadUserKeys(password);
+      }
+
+      await Promise.all([
+        fetchMessages(),
+        loadRoomKey()
+      ]);
+
+      setupWebSocket();
+    } catch (error) {
+      console.error('Failed to initialize chat:', error);
+      setError('Failed to initialize encryption');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadRoomKey = async () => {
+    try {
+      await keyService.getRoomKey(numericRoomId);
+      setHasRoomKey(true);
+    } catch (error) {
+      console.error('Failed to load room key:', error);
+      setError('Failed to load room encryption key');
+      setHasRoomKey(false);
+    }
+  };
 
   const setupWebSocket = () => {
     if (!roomId || !token) return;
@@ -46,14 +81,14 @@ const Chat: React.FC = () => {
       console.log('WebSocket connected');
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       try {
         const messageWrapper = JSON.parse(event.data);
         if (messageWrapper.type === 'new_message') {
           if (Array.isArray(messageWrapper.data)) {
             // Full messages list update
             setMessages(messageWrapper.data);
-            decryptAllMessages(messageWrapper.data);
+            await decryptAllMessages(messageWrapper.data);
           } else {
             // Single message
             const messageData: Message = messageWrapper.data;
@@ -62,13 +97,13 @@ const Chat: React.FC = () => {
               return [...prev, messageData];
             });
             // Decrypt the new message
-            if (roomKey) {
+            if (hasRoomKey) {
               try {
-                const encryptedData = JSON.parse(messageData.encrypted_data);
-                const decrypted = decryptMessage(encryptedData, roomKey);
+                const decrypted = await keyService.decryptMessage(messageData.encrypted_data, numericRoomId);
                 setDecryptedMessages(prev => ({ ...prev, [messageData.id]: decrypted }));
               } catch (err) {
                 console.error('Failed to decrypt incoming message:', err);
+                setDecryptedMessages(prev => ({ ...prev, [messageData.id]: '[Failed to decrypt]' }));
               }
             }
           }
@@ -98,8 +133,8 @@ const Chat: React.FC = () => {
       });
       setMessages(response.data);
       // Decrypt existing messages
-      if (roomKey) {
-        decryptAllMessages(response.data);
+      if (hasRoomKey) {
+        await decryptAllMessages(response.data);
       }
     } catch (err) {
       console.error('Failed to fetch messages', err);
@@ -107,62 +142,64 @@ const Chat: React.FC = () => {
     }
   };
 
-  const fetchRoomKey = async () => {
-    try {
-      // Get user's encrypted key for this room
-      const keyResponse = await axios.get(`http://localhost:8080/rooms/${roomId}/key`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      // For now, using a simple approach - in production this would be properly decrypted
-      if (keyResponse.data.symmetric_key) {
-        const encryptedKeyData = JSON.parse(keyResponse.data.symmetric_key);
-        // Simple decryption placeholder - in real implementation, use Kyber private key
-        setRoomKey(encryptedKeyData.symmetric_key || 'placeholder-key');
-        await fetchMessages(); // Re-fetch messages now that we have the key
-      }
-    } catch (err) {
-      console.error('Failed to fetch room key', err);
-      setError('Failed to load room encryption key');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const decryptAllMessages = (messageList: Message[]) => {
-    if (!roomKey) return;
-
+  const decryptAllMessages = async (messageList: Message[]) => {
     const decrypted: {[key: number]: string} = {};
-    messageList.forEach(msg => {
+    for (const msg of messageList) {
       try {
-        const encryptedData = JSON.parse(msg.encrypted_data);
-        decrypted[msg.id] = decryptMessage(encryptedData, roomKey);
+        const decryptedText = await keyService.decryptMessage(msg.encrypted_data, numericRoomId);
+        decrypted[msg.id] = decryptedText;
       } catch (err) {
         decrypted[msg.id] = '[Failed to decrypt]';
       }
-    });
+    }
     setDecryptedMessages(decrypted);
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !roomKey) return;
+    if (!newMessage.trim() || !hasRoomKey) return;
 
     try {
       // Encrypt message with room key
-      const encryptedData = encryptMessage(newMessage, roomKey);
+      const encryptedData = await keyService.encryptMessage(newMessage, numericRoomId);
 
       await axios.post(`http://localhost:8080/messages/${roomId}/send`, {
-        encrypted_data: JSON.stringify(encryptedData),
+        encrypted_data: encryptedData,
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       setNewMessage('');
+      // Update encryption preview
+      updateEncryptionPreview(newMessage);
     } catch (err) {
       console.error('Failed to send message', err);
       setError('Failed to send message');
     }
   };
+
+  const updateEncryptionPreview = async (text: string) => {
+    if (!text.trim() || !hasRoomKey) {
+      setEncryptionPreview('');
+      return;
+    }
+
+    try {
+      const encrypted = await keyService.encryptMessage(text, numericRoomId);
+      const preview = encrypted.substring(0, 50) + (encrypted.length > 50 ? '...' : '');
+      setEncryptionPreview(`Encrypted: ${preview}`);
+    } catch (error) {
+      setEncryptionPreview('Encryption failed');
+    }
+  };
+
+  // Update preview when typing
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      updateEncryptionPreview(newMessage);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [newMessage, hasRoomKey]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -203,31 +240,39 @@ const Chat: React.FC = () => {
         <div ref={messagesEndRef} />
       </Paper>
 
-      <Box sx={{ mt: 2, display: 'flex' }}>
+      <Box sx={{ mt: 2 }}>
         <TextField
           fullWidth
           label="Type an encrypted message..."
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-          disabled={!roomKey}
+          disabled={!hasRoomKey}
+          helperText={encryptionPreview}
         />
+        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            {hasRoomKey
+              ? '✅ Messages encrypted with quantum-resistant AES-GCM'
+              : '⏳ Loading encryption keys...'
+            }
+          </Typography>
+          <Chip
+            label={hasRoomKey ? 'Secure' : 'Loading...'}
+            color={hasRoomKey ? 'success' : 'warning'}
+            size="small"
+          />
+        </Box>
         <Button
           variant="contained"
           onClick={sendMessage}
-          sx={{ ml: 1 }}
-          disabled={!newMessage.trim() || !roomKey}
+          sx={{ mt: 1, width: '100%' }}
+          disabled={!newMessage.trim() || !hasRoomKey}
+          fullWidth
         >
-          Send
+          Send Encrypted Message
         </Button>
       </Box>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        {roomKey
-          ? '✅ Messages encrypted with quantum-resistant AES'
-          : '⏳ Loading encryption keys...'
-        }
-      </Typography>
     </Container>
   );
 };

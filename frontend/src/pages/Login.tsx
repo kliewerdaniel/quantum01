@@ -17,6 +17,8 @@ const Login: React.FC = () => {
         password,
       });
       localStorage.setItem('token', response.data.access_token);
+      // Store password temporarily for key decryption
+      localStorage.setItem('userPassword', password);
       navigate('/rooms');
     } catch (err) {
       setError('Login failed. Please check your credentials.');
