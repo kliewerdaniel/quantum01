@@ -23,7 +23,7 @@ const Rooms: React.FC = () => {
 
   const fetchRooms = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/rooms/', {
+      const response = await axios.get('http://localhost:8080/rooms/', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setRooms(response.data);
@@ -34,7 +34,7 @@ const Rooms: React.FC = () => {
 
   const handleCreateRoom = async () => {
     try {
-      await axios.post('http://localhost:8100/rooms/', { name: roomName }, {
+      await axios.post('http://localhost:8080/rooms/', { name: roomName }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setCreateDialog(false);

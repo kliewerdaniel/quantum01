@@ -1,10 +1,10 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware as FastAPICORS
 from sqlalchemy.orm import Session
-from database.db import engine, get_db
-from database.models import Base
-from routers import auth, rooms, messages
-from connection_manager import manager
+from .database.db import engine, get_db
+from .database.models import Base
+from .routers import auth, rooms, messages
+from .connection_manager import manager
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -16,11 +16,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="QuantumChat API", version="1.0.0", lifespan=lifespan)
 
-# CORS middleware
+# CORS middleware - use specific origins to avoid issues
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8100"],  # React dev server and backend
-    allow_credentials=True,
+    FastAPICORS,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -66,4 +66,4 @@ async def websocket_endpoint(room_id: int, websocket: WebSocket, token: str = No
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

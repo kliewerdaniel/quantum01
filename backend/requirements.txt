@@ -11,4 +11,3 @@ qiskit-aer
 cryptography
 python-decouple
 aiofiles
-liboqs

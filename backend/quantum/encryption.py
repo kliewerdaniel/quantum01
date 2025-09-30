@@ -11,17 +11,20 @@ import os
 
 try:
     import oqs
+    # Check if KeyEncapsulation is available
+    hasattr(oqs, 'KeyEncapsulation')
     KEM_AVAILABLE = True
     print("Quantum KEM libraries loaded successfully")
-except ImportError:
+except (ImportError, AttributeError) as e:
     KEM_AVAILABLE = False
-    print("Warning: Quantum KEM not available, using secure AES-GCM fallback")
+    print(f"Warning: Quantum KEM not available: {e}, using secure AES-GCM fallback")
 
 def generate_kyber_keypair():
     """
     Generate Kyber768 keypairs if available, otherwise return secure AES keys as placeholder.
     Returns tuple: (public_key bytes, private_key bytes)
     """
+    global KEM_AVAILABLE
     if KEM_AVAILABLE:
         try:
             # Use real Kyber768 for quantum resistance
@@ -44,6 +47,7 @@ def encapsulate_key(public_key):
     Use Kyber KEM to encapsulate a shared secret if available, otherwise generate secure AES key.
     Returns tuple: (shared_secret, ciphertext)
     """
+    global KEM_AVAILABLE
     if KEM_AVAILABLE:
         try:
             kemalg = "Kyber768"
@@ -64,6 +68,7 @@ def decapsulate_key(private_key, ciphertext):
     """
     Use Kyber KEM to decapsulate shared secret if available, otherwise extract from ciphertext.
     """
+    global KEM_AVAILABLE
     if KEM_AVAILABLE:
         try:
             kemalg = "Kyber768"
