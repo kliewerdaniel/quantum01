@@ -12,7 +12,6 @@ import {
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
-import { hashPassword } from '../utils/cryptoUtils';
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
