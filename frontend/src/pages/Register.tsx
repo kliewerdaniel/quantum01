@@ -11,7 +11,9 @@ import {
   Divider
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import authService from '../services/authService';
+import keyService from '../services/keyService';
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -62,10 +64,14 @@ const Register: React.FC = () => {
         password: formData.password
       });
 
-      // Store user data (backend generates quantum keys)
+      // Store user data
       localStorage.setItem('user', JSON.stringify(response.user));
-      // Store password for key decryption (will be cleared after key loading)
+      // Store password for key decryption
       localStorage.setItem('userPassword', formData.password);
+      localStorage.setItem('token', response.access_token);
+
+      // Fetch and decrypt private key
+      await loadAndStoreKeys(formData.password, response.access_token);
 
       setSuccess(true);
       setTimeout(() => navigate('/rooms'), 2000);
@@ -74,6 +80,15 @@ const Register: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAndStoreKeys = async (password: string, token: string) => {
+    const response = await axios.get('http://localhost:8080/auth/me', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const privateKeyDecrypted = await keyService.loadAndDecryptPrivateKeyFromServer(password, response.data.kyber_private_key_encrypted);
+    await keyService.storeUserKeys(password, privateKeyDecrypted, response.data.kyber_public_key);
   };
 
   if (success) {

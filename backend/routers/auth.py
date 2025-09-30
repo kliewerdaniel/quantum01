@@ -130,3 +130,13 @@ def decrypt_private_key(password: str, encrypted_data: str) -> bytes:
         raise HTTPException(status_code=400, detail="Failed to decrypt private key - invalid password or corrupted data")
 
 from auth import decode_token
+
+@router.get("/me")
+async def get_current_user_profile(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "kyber_public_key": current_user.kyber_public_key,
+        "kyber_private_key_encrypted": current_user.kyber_private_key_encrypted
+    }

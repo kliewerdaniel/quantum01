@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TextField, Button, Container, Typography, Box, Alert, Link } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import keyService from '../services/keyService';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -19,10 +20,23 @@ const Login: React.FC = () => {
       localStorage.setItem('token', response.data.access_token);
       // Store password temporarily for key decryption
       localStorage.setItem('userPassword', password);
+
+      // Fetch and decrypt private key
+      await loadAndStoreKeys(password, response.data.access_token);
+
       navigate('/rooms');
     } catch (err) {
       setError('Login failed. Please check your credentials.');
     }
+  };
+
+  const loadAndStoreKeys = async (password: string, token: string) => {
+    const response = await axios.get('http://localhost:8080/auth/me', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const privateKeyDecrypted = await keyService.loadAndDecryptPrivateKeyFromServer(password, response.data.kyber_private_key_encrypted);
+    await keyService.storeUserKeys(password, privateKeyDecrypted, response.data.kyber_public_key);
   };
 
   return (

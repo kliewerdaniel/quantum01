@@ -29,13 +29,18 @@ const Chat: React.FC = () => {
   const token = localStorage.getItem('token');
   const numericRoomId = roomId ? parseInt(roomId) : 0;
 
+  const initializedRef = useRef(false);
+
   useEffect(() => {
     if (!token) {
       navigate('/login');
       return;
     }
 
-    initializeChat();
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      initializeChat();
+    }
   }, [roomId, token, navigate]);
 
   const initializeChat = async () => {
