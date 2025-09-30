@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import base64
 import os
-from ..database.db import get_db
-from ..database.models import User, Room, KeyDistribution, user_room_association
+from database.db import get_db
+from database.models import User, Room, KeyDistribution, user_room_association
 from .auth import get_current_user
-from ..quantum.encryption import generate_kyber_keypair, encapsulate_key
+from quantum.encryption import generate_kyber_keypair, encapsulate_key
 import base64
 
 router = APIRouter()

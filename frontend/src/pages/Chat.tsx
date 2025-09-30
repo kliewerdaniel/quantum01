@@ -3,7 +3,6 @@ import { Container, Typography, List, ListItem, ListItemText, TextField, Button,
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { encryptMessage, decryptMessage } from '../utils/cryptoUtils';
-import { io, Socket } from 'socket.io-client';
 
 interface Message {
   id: number;
@@ -21,7 +20,7 @@ const Chat: React.FC = () => {
   const [roomKey, setRoomKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket, setSocket] = useState<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -41,37 +40,50 @@ const Chat: React.FC = () => {
   const setupWebSocket = () => {
     if (!roomId || !token) return;
 
-    const ws = io('ws://localhost:8000', {
-      auth: { token },
-      query: { roomId }
-    });
+    const ws = new WebSocket(`ws://localhost:8080/ws/${roomId}?token=${token}`);
 
-    ws.on('new_message', (messageData: Message) => {
-      setMessages(prev => [...prev, messageData]);
-      // Decrypt the new message
-      if (roomKey) {
-        try {
-          const encryptedData = JSON.parse(messageData.encrypted_data);
-          const decrypted = decryptMessage(encryptedData, roomKey);
-          setDecryptedMessages(prev => ({ ...prev, [messageData.id]: decrypted }));
-        } catch (err) {
-          console.error('Failed to decrypt incoming message:', err);
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const messageWrapper = JSON.parse(event.data);
+        if (messageWrapper.type === 'new_message') {
+          const messageData: Message = messageWrapper.data;
+          setMessages(prev => [...prev, messageData]);
+          // Decrypt the new message
+          if (roomKey) {
+            try {
+              const encryptedData = JSON.parse(messageData.encrypted_data);
+              const decrypted = decryptMessage(encryptedData, roomKey);
+              setDecryptedMessages(prev => ({ ...prev, [messageData.id]: decrypted }));
+            } catch (err) {
+              console.error('Failed to decrypt incoming message:', err);
+            }
+          }
         }
+      } catch (err) {
+        console.error('Failed to parse WebSocket message:', err);
       }
-    });
+    };
 
-    ws.on('connect_error', (err) => {
-      console.error('WebSocket connection error:', err);
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
       setError('Failed to connect to chat server');
-    });
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
 
     setSocket(ws);
-    return () => ws.disconnect();
+    return () => ws.close();
   };
 
   const fetchMessages = async () => {
     try {
-      const response = await axios.get(`http://localhost:8100/messages/${roomId}`, {
+      const response = await axios.get(`http://localhost:8080/messages/${roomId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setMessages(response.data);
@@ -88,7 +100,7 @@ const Chat: React.FC = () => {
   const fetchRoomKey = async () => {
     try {
       // Get user's encrypted key for this room
-      const keyResponse = await axios.get(`http://localhost:8100/rooms/${roomId}/key`, {
+      const keyResponse = await axios.get(`http://localhost:8080/rooms/${roomId}/key`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -129,7 +141,7 @@ const Chat: React.FC = () => {
       // Encrypt message with room key
       const encryptedData = encryptMessage(newMessage, roomKey);
 
-      await axios.post(`http://localhost:8100/messages/${roomId}/send`, {
+      await axios.post(`http://localhost:8080/messages/${roomId}/send`, {
         encrypted_data: JSON.stringify(encryptedData),
       }, {
         headers: { Authorization: `Bearer ${token}` },

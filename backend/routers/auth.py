@@ -8,10 +8,10 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 import os
-from ..database.db import get_db
-from ..database.models import User
-from ..auth import verify_password, get_password_hash, create_access_token
-from ..quantum.encryption import generate_kyber_keypair
+from database.db import get_db
+from database.models import User
+from auth import verify_password, get_password_hash, create_access_token
+from quantum.encryption import generate_kyber_keypair
 
 router = APIRouter()
 security = HTTPBearer()
@@ -129,4 +129,4 @@ def decrypt_private_key(password: str, encrypted_data: str) -> bytes:
     except Exception as e:
         raise HTTPException(status_code=400, detail="Failed to decrypt private key - invalid password or corrupted data")
 
-from ..auth import decode_token
+from auth import decode_token

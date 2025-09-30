@@ -1,10 +1,10 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware as FastAPICORS
 from sqlalchemy.orm import Session
-from .database.db import engine, get_db
-from .database.models import Base
-from .routers import auth, rooms, messages
-from .connection_manager import manager
+from database.db import engine, get_db
+from database.models import Base
+from routers import auth, rooms, messages
+from connection_manager import manager
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -19,7 +19,7 @@ app = FastAPI(title="QuantumChat API", version="1.0.0", lifespan=lifespan)
 # CORS middleware - use specific origins to avoid issues
 app.add_middleware(
     FastAPICORS,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001", "http://192.168.0.188:3001"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,8 +33,8 @@ app.include_router(messages.router, prefix="/messages", tags=["Messages"])
 # WebSocket endpoint for real-time chat
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(room_id: int, websocket: WebSocket, token: str = None):
-    from .auth import decode_token
-    from .database.models import User, Room
+    from auth import decode_token
+    from database.models import User, Room
     if not token:
         await websocket.close(code=1008)
         return
