@@ -1,10 +1,10 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from .database.db import engine, get_db
-from .database.models import Base
-from .routers import auth, rooms, messages
-from .connection_manager import manager
+from database.db import engine, get_db
+from database.models import Base
+from routers import auth, rooms, messages
+from connection_manager import manager
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -19,7 +19,7 @@ app = FastAPI(title="QuantumChat API", version="1.0.0", lifespan=lifespan)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React dev server
+    allow_origins=["http://localhost:3000", "http://localhost:8100"],  # React dev server and backend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

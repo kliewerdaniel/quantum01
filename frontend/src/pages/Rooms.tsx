@@ -34,7 +34,7 @@ const Rooms: React.FC = () => {
 
   const handleCreateRoom = async () => {
     try {
-      await axios.post('http://localhost:8000/rooms/', { name: roomName }, {
+      await axios.post('http://localhost:8100/rooms/', { name: roomName }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setCreateDialog(false);
